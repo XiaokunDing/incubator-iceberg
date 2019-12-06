@@ -48,7 +48,6 @@ public interface FileIO extends Serializable {
   /**
    * Convenience method to {@link #deleteFile(String) delete} an {@link InputFile}.
    */
-
   default void deleteFile(InputFile file) {
     deleteFile(file.location());
   }
