@@ -312,6 +312,8 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
   }
 
   public  Database nameSpaceToHiveDb(Namespace namespace) {
+    Preconditions.checkArgument(!namespace.isEmpty(),
+        "Namespace could not empty. ");
     String warehouseLocation = conf.get("hive.metastore.warehouse.dir");
     Preconditions.checkNotNull(
         warehouseLocation,
