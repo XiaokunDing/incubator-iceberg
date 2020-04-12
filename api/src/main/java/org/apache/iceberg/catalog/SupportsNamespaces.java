@@ -54,11 +54,11 @@ public interface SupportsNamespaces {
    * Create a namespace in the catalog.
    *
    * @param namespace a multi-part namespace
-   * @param meta a string map of properties for the given namespace
+   * @param metadata a string map of properties for the given namespace
    * @throws AlreadyExistsException If the namespace already exists
    * @throws UnsupportedOperationException If create is not a supported operation
    */
-  void createNamespace(Namespace namespace, Map<String, String> meta);
+  void createNamespace(Namespace namespace, Map<String, String> metadata);
 
   /**
    * List top-level namespaces from the catalog.
@@ -77,7 +77,7 @@ public interface SupportsNamespaces {
    * List  namespaces from the namespace.
    * <p>
    * For example, if table a.b.t exists, use 'SELECT NAMESPACE IN a' this method
-   * must return Namepace.of("b") {@link Namespace}.
+   * must return Namepace.of("a","b") {@link Namespace}.
    *
    * @return an List of namespace {@link Namespace} names
    * @throws NoSuchNamespaceException If the namespace does not exist (optional)
@@ -106,8 +106,8 @@ public interface SupportsNamespaces {
    * Create a namespace in the catalog.
    *
    * @param namespace a multi-part namespace
-   * @param meta a string map of properties for the given namespace
+   * @param metadata a string map of properties for the given namespace
    * @throws UnsupportedOperationException If create is not a supported operation
    */
-  boolean setNamespaceMetadata(Namespace namespace, Map<String, String> meta);
+  boolean setNamespaceMetadata(Namespace namespace, Map<String, String> metadata);
 }

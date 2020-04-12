@@ -49,6 +49,8 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.exceptions.RuntimeIOException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * HadoopCatalog provides a way to use table names like db.table to work with path-based tables under a common
@@ -65,6 +67,8 @@ import org.apache.iceberg.exceptions.RuntimeIOException;
  */
 
 public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, SupportsNamespaces {
+  private static final Logger LOG = LoggerFactory.getLogger(HadoopCatalog.class);
+
   private static final String ICEBERG_HADOOP_WAREHOUSE_BASE = "iceberg/warehouse";
   private static final String TABLE_METADATA_FILE_EXTENSION = ".metadata.json";
   private static final Joiner SLASH = Joiner.on("/");
@@ -212,8 +216,9 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
   public void createNamespace(Namespace namespace, Map<String, String> meta) {
     Preconditions.checkArgument(!namespace.isEmpty(),
         "Cannot create namespace with invalid name: %s", namespace);
-    Preconditions.checkArgument(meta == null || meta.size() == 0,
-        "Hadoop Catalog not support namespace metaData: %s", namespace);
+    if (meta.size() > 0) {
+      LOG.warn("Hadoop Catalog not support metadata {} on namespace: {}", meta, namespace);
+    }
     Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
 
@@ -275,8 +280,8 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
 
   @Override
   public boolean setNamespaceMetadata(Namespace namespace, Map<String, String> meta) {
-    throw new  UnsupportedOperationException(
-        "Un support setNamespaceMetadata() in the HadoopCatalog: " + namespace.toString());
+    throw new UnsupportedOperationException(
+        "Unsupported setNamespaceMetadata() in the HadoopCatalog: " + namespace.toString());
   }
 
   @Override
@@ -304,18 +309,14 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
   private boolean isNamespace(FileSystem fs, Path path) {
     Path metadataPath = new Path(path, "metadata");
     try {
-      if (fs.isDirectory(path) && !(fs.exists(metadataPath) && fs.isDirectory(metadataPath) &&
-          (fs.listStatus(metadataPath, TABLE_FILTER).length >= 1))) {
-        return true;
-      }
+      return fs.isDirectory(path) && !(fs.exists(metadataPath) && fs.isDirectory(metadataPath) &&
+          (fs.listStatus(metadataPath, TABLE_FILTER).length >= 1));
     } catch (IOException ioe) {
       throw new RuntimeIOException(ioe, "Failed to list namespace %s info: %s ", path);
     }
-    return false;
   }
 
   @Override
   public void close() throws IOException {
   }
-
 }

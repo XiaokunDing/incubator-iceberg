@@ -74,7 +74,7 @@ public class TestHiveCatalog extends HiveMetastoreTest {
     Namespace namespace1 = Namespace.of("dbname1");
     catalog.createNamespace(namespace1, meta);
     namespaces = catalog.listNamespaces(namespace1);
-    Assert.assertTrue("Hive db not hive the namespace 'dbname1'", namespaces.contains(namespace1));
+    Assert.assertTrue("Hive db not hive the namespace 'dbname1'", namespaces.get(0).isEmpty());
 
     Namespace namespace2 = Namespace.of("dbname2");
     catalog.createNamespace(namespace2, meta);

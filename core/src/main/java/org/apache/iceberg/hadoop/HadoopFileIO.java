@@ -62,7 +62,7 @@ public class HadoopFileIO implements FileIO {
     try {
       fs.delete(toDelete, false /* not recursive */);
     } catch (IOException e) {
-      throw new RuntimeIOException(e, "Cannot delete the file: : %s", path);
+      throw new RuntimeIOException(e, "Failed to delete file: %s", path);
     }
   }
 }

@@ -27,6 +27,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
@@ -203,11 +204,8 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
     }
 
     try {
-      return namespace.isEmpty() ? clients.run(HiveMetaStoreClient::getAllDatabases)
-          .stream().map(name -> Namespace.of(name))
-          .collect(Collectors.toList()) : clients.run(client -> client.getDatabases(namespace.level(0)))
-          .stream().map(name -> Namespace.of(name))
-          .collect(Collectors.toList());
+      return namespace.isEmpty() ? clients.run(HiveMetaStoreClient::getAllDatabases).stream().map(Namespace::of)
+          .collect(Collectors.toList()) : Stream.of(Namespace.empty()).collect(Collectors.toList());
     } catch (TException e) {
       throw new RuntimeException("Failed to list all namespace: " + namespace.toString() + " in Hive MataStore",  e);
 
