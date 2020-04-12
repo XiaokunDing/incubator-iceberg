@@ -19,7 +19,6 @@
 
 package org.apache.iceberg.catalog;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import org.apache.iceberg.PartitionSpec;
@@ -343,19 +342,11 @@ public interface Catalog {
   Map<String, String>  loadNamespaceMetadata(Namespace namespace);
 
   /**
-   * Load metadata properties for a namespace.
+   * Drop namespace, while the namespace haven't table or sub namespace will return true.
    *
    * @param namespace a Namespace.of(name) {@link Namespace}
    * @return true while drop success.
    */
-  boolean dropNamespace(Namespace namespace) throws IOException;
-
-  /**
-   * Load metadata properties for a namespace.
-   *
-   * @param namespace a Namespace.of(name) {@link Namespace}
-   * @return true while alter success.
-   */
-  boolean alterNamespace(Namespace namespace);
+  boolean dropNamespace(Namespace namespace);
 
 }

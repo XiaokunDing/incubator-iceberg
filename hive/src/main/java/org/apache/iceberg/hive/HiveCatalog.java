@@ -275,11 +275,6 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
   }
 
   @Override
-  public boolean alterNamespace(Namespace namespace) {
-    throw new UnsupportedOperationException("Cannot alter Namespaces for Hive namespace");
-  }
-
-  @Override
   protected boolean isValidIdentifier(TableIdentifier tableIdentifier) {
     return tableIdentifier.namespace().levels().length == 1;
   }

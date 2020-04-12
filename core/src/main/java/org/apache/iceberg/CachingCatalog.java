@@ -96,11 +96,6 @@ public class CachingCatalog implements Catalog {
   }
 
   @Override
-  public boolean alterNamespace(Namespace namespace) {
-    return false;
-  }
-
-  @Override
   public Table createTable(TableIdentifier ident, Schema schema, PartitionSpec spec, String location,
                            Map<String, String> properties) {
     AtomicBoolean created = new AtomicBoolean(false);

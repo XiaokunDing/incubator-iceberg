@@ -166,7 +166,7 @@ public abstract class BaseMetastoreCatalog implements Catalog {
   }
 
   public boolean alterNamespace(Namespace namespace) {
-    return false;
+    throw new UnsupportedOperationException("Cannot alter Namespaces for Hadoop namespace");
   }
 
 

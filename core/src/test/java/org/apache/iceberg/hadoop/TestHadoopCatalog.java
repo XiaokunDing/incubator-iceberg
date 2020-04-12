@@ -182,8 +182,9 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     TableIdentifier tbl2 = TableIdentifier.of("db", "ns2", "ns3", "tbl2");
     TableIdentifier tbl3 = TableIdentifier.of("db", "ns3", "tbl4");
     TableIdentifier tbl4 = TableIdentifier.of("db", "metadata");
+    TableIdentifier tbl5 = TableIdentifier.of("db2", "metadata");
 
-    Lists.newArrayList(tbl1, tbl2, tbl3, tbl4).forEach(t ->
+    Lists.newArrayList(tbl1, tbl2, tbl3, tbl4, tbl5).forEach(t ->
         catalog.createTable(t, SCHEMA, PartitionSpec.unpartitioned())
     );
 
@@ -201,8 +202,9 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
 
     List<Namespace> nsp3 = catalog.listNamespaces();
     Set<String> tblSet2 = Sets.newHashSet(nsp3.stream().map(t -> t.toString()).iterator());
-    Assert.assertEquals(tblSet2.size(), 1);
+    Assert.assertEquals(tblSet2.size(), 2);
     Assert.assertTrue(tblSet2.contains("db"));
+    Assert.assertTrue(tblSet2.contains("db2"));
     AssertHelpers.assertThrows("should throw exception", NotFoundException.class,
         "Unknown namespace", () -> {
           catalog.listNamespaces(Namespace.of("db", "db2", "ns2"));
