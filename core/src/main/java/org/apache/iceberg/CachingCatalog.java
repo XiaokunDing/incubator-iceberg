@@ -70,26 +70,6 @@ public class CachingCatalog implements Catalog {
     return tableCache.get(canonicalizeIdentifier(ident), catalog::loadTable);
   }
 
-  public void createNamespace(Namespace namespace, Map<String, String> meta) {
-    catalog.createNamespace(namespace, meta);
-  }
-
-  public List<Namespace> listNamespaces() {
-    return catalog.listNamespaces();
-  }
-
-  public List<Namespace> listNamespaces(Namespace namespace) {
-    return catalog.listNamespaces(namespace);
-  }
-
-  public Map<String, String>  loadNamespaceMetadata(Namespace namespace) {
-    return catalog.loadNamespaceMetadata(namespace);
-  }
-
-  public boolean dropNamespace(Namespace namespace) {
-    return catalog.dropNamespace(namespace);
-  }
-
   @Override
   public Table createTable(TableIdentifier ident, Schema schema, PartitionSpec spec, String location,
                            Map<String, String> properties) {

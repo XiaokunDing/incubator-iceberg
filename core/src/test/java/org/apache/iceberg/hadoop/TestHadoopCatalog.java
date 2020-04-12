@@ -20,9 +20,9 @@
 package org.apache.iceberg.hadoop;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,12 +36,11 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
-import org.apache.iceberg.exceptions.NotFoundException;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class TestHadoopCatalog extends HadoopTableTestBase {
-  private static Map meta = new HashMap();
+  private static Map<String, String> meta = Maps.newHashMap();
 
   @Test
   public void testBasicCatalog() throws Exception {
@@ -134,8 +133,8 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Assert.assertEquals(tbls2.size(), 1);
     Assert.assertTrue(tbls2.get(0).name().equals("tbl3"));
 
-    AssertHelpers.assertThrows("should throw exception", NotFoundException.class,
-        "Unknown namespace", () -> {
+    AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
+        "namespace does not exist: ", () -> {
         catalog.listTables(Namespace.of("db", "ns1", "ns2"));
       });
   }
@@ -211,7 +210,7 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Assert.assertTrue(tblSet2.contains("db"));
     Assert.assertTrue(tblSet2.contains("db2"));
     AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
-        "Unknown namespace", () -> {
+        "namespace does not exist: ", () -> {
           catalog.listNamespaces(Namespace.of("db", "db2", "ns2"));
         });
   }
@@ -233,7 +232,7 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     catalog.loadNamespaceMetadata(Namespace.of("db"));
 
     AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
-        "Unknown namespace", () -> {
+        "namespace does not exist: ", () -> {
           catalog.loadNamespaceMetadata(Namespace.of("db", "db2", "ns2"));
         });
   }
@@ -253,14 +252,18 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
 
     AssertHelpers.assertThrows("should throw exception", IllegalArgumentException.class,
         "This Namespace have tables, cannot drop it", () -> {
-          catalog.dropNamespace(Namespace.of("db"));
+          catalog.dropNamespace(Namespace.of("db"), false);
+        });
+    AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
+        "namespace does not exist: ", () -> {
+          catalog.dropNamespace(Namespace.of("db.ns1"), false);
         });
     AssertHelpers.assertThrows("should throw exception", IllegalArgumentException.class,
         "This Namespace have sub Namespace, cannot drop it", () -> {
-          catalog.dropNamespace(Namespace.of("db1"));
+          catalog.dropNamespace(Namespace.of("db1"), false);
         });
     catalog.dropTable(tbl1);
-    catalog.dropNamespace(Namespace.of("db"));
+    catalog.dropNamespace(Namespace.of("db"), false);
     String metaLocation = warehousePath + "/" + "db";
     FileSystem fs = Util.getFs(new Path(metaLocation), conf);
     Assert.assertFalse(fs.isDirectory(new Path(metaLocation)));

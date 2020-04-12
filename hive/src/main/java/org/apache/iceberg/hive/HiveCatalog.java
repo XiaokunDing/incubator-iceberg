@@ -39,14 +39,16 @@ import org.apache.iceberg.BaseMetastoreCatalog;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
+public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, SupportsNamespaces {
   private static final Logger LOG = LoggerFactory.getLogger(HiveCatalog.class);
 
   private final HiveClientPool clients;
@@ -174,7 +176,7 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
     Preconditions.checkArgument(!namespace.isEmpty(),
         "Cannot create namespace with invalid name: %s", namespace.toString());
     Preconditions.checkArgument(namespace.levels().length == 1,
-        "Hive MetaStore cannot support multi part namespace now: %s", namespace.toString());
+        "Cannot support multi part namespace in Hive MetaStore: %s", namespace.toString());
     try {
       clients.run(client -> {
         client.createDatabase(nameSpaceToHiveDb(namespace, meta));
@@ -182,23 +184,22 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
       });
 
     } catch (AlreadyExistsException e) {
-      throw new org.apache.iceberg.exceptions.AlreadyExistsException("namespace already exists: %s",
-            namespace.toString());
+      throw new org.apache.iceberg.exceptions.AlreadyExistsException("Namespace %s already exists:",
+            namespace.toString(), e.getMessage());
 
     } catch (TException e) {
       throw new RuntimeException("Failed to create namespace " + namespace.toString() + " in Hive MataStore", e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted in call to createDatabase(name)", e);
+      throw new RuntimeException("Interrupted in call to createDatabase(name)" + namespace.toString(), e);
     }
   }
 
   @Override
   public List<Namespace> listNamespaces(Namespace namespace) {
-    if (!namespace.isEmpty()) {
-      Preconditions.checkArgument(namespace.levels().length == 1,
-          "Hive MetaStore cannot support multi part namespace now: %s", namespace.toString());
+    if (!namespace.isEmpty() && namespace.levels().length != 1) {
+      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
     }
     List<Namespace> namespaces = new ArrayList<>();
     List<String> dbs;
@@ -212,30 +213,29 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
       return namespaces;
 
     } catch (TException e) {
-      throw new RuntimeException("Failed to list all namespace: " + e);
+      throw new RuntimeException("Failed to list all namespace: " + namespace.toString(),  e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted in call to getAllDatabases()", e);
+      throw new RuntimeException("Interrupted in call to getAllDatabases()" + namespace.toString(), e);
     }
   }
 
   @Override
-  public boolean dropNamespace(Namespace namespace) {
-    Preconditions.checkArgument(!namespace.isEmpty(),
-        "Namespace could not empty. ");
-    Preconditions.checkArgument(namespace.levels().length == 1,
-        "Hive MetaStore cannot support multi part namespace now: %s", namespace.toString());
+  public boolean dropNamespace(Namespace namespace, boolean cascade) {
+    if (namespace.isEmpty() || namespace.levels().length != 1) {
+      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
+    }
     try {
       clients.run(client -> {
-        client.dropDatabase(namespace.level(0));
+        client.dropDatabase(namespace.level(0), false, false, cascade);
         return null;
       });
 
       return true;
 
     } catch (NoSuchObjectException e) {
-      throw new NotFoundException("Unknown namespace %s", namespace.toString(), e.getMessage());
+      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString(), e.getMessage());
 
     } catch (TException e) {
       throw new RuntimeException("Failed to drop namespace " + namespace.toString(), e);
@@ -248,19 +248,18 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable {
 
   @Override
   public Map<String, String> loadNamespaceMetadata(Namespace namespace) {
-    Preconditions.checkArgument(!namespace.isEmpty(),
-        "Namespace could not empty. ");
-    Preconditions.checkArgument(namespace.levels().length == 1,
-        "Hive MetaStore cannot support multi part namespace now: %s", namespace.toString());
+    if (namespace.isEmpty() || namespace.levels().length != 1) {
+      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
+    }
     try {
       Database database = clients.run(client -> client.getDatabase(namespace.toString()));
       return getMetafrpmhiveDb(database);
 
     } catch (NoSuchObjectException e) {
-      throw new NotFoundException("Unknown namespace %s", namespace.toString(), e.getMessage());
+      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString(), e.getMessage());
 
     } catch (UnknownDBException e) {
-      throw new NotFoundException(e, "Unknown namespace %s" + namespace.toString(), e.getMessage());
+      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString(), e.getMessage());
 
     } catch (TException e) {
       throw new RuntimeException("Failed to list namespace under namespace: %s" + namespace.toString(), e);

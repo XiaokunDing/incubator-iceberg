@@ -19,6 +19,9 @@
 
 package org.apache.iceberg.exceptions;
 
+/**
+ * Exception raised when attempting to load a namespace that does not exist.
+ */
 public class NoSuchNamespaceException extends RuntimeException {
   public NoSuchNamespaceException(String message, Object... args) {
     super(String.format(message, args));

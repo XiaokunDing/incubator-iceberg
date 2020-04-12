@@ -25,6 +25,7 @@ import java.util.Map;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.iceberg.AssertHelpers;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
@@ -88,11 +89,14 @@ public class TestHiveCatalog extends HiveMetastoreTest {
     Assert.assertTrue(nameMata.get("owner").equals("apache"));
     Assert.assertTrue(nameMata.get("group").equals("iceberg"));
 
-    Assert.assertTrue("drop namespace " + namespace.toString() + "error", catalog.dropNamespace(namespace));
-
-    AssertHelpers.assertThrows("Unknown namespace " + namespace.toString(),
-        org.apache.iceberg.exceptions.NotFoundException.class,
-        "Unknown namespace " + namespace.toString(), () -> {
+    Assert.assertTrue("drop namespace " + namespace.toString() + "error", catalog.dropNamespace(namespace, false));
+    AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
+        "namespace does not exist:", () -> {
+          catalog.dropNamespace(Namespace.of("db.ns1"), false);
+        });
+    AssertHelpers.assertThrows("should throw exception" + namespace.toString(),
+        org.apache.iceberg.exceptions.NoSuchNamespaceException.class,
+        "namespace does not exist: " + namespace.toString(), () -> {
           catalog.loadNamespaceMetadata(namespace);
         });
   }

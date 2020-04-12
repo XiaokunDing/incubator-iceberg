@@ -58,5 +58,4 @@ public interface FileIO extends Serializable {
   default void deleteFile(OutputFile file) {
     deleteFile(file.location());
   }
-
 }

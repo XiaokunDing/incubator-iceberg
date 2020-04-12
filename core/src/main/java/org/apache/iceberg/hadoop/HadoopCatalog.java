@@ -44,10 +44,10 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
-import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 
 /**
@@ -63,17 +63,16 @@ import org.apache.iceberg.exceptions.RuntimeIOException;
  *
  * Note: The HadoopCatalog requires that the underlying file system supports atomic rename.
  */
-public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
-  private static final PathFilter TABLE_FILTER = path -> path.getName().endsWith(TABLE_METADATA_FILE_EXTENSION);
+
+public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, SupportsNamespaces {
   private static final String ICEBERG_HADOOP_WAREHOUSE_BASE = "iceberg/warehouse";
   private static final String TABLE_METADATA_FILE_EXTENSION = ".metadata.json";
+  private static final PathFilter TABLE_FILTER = path -> path.getName().endsWith(TABLE_METADATA_FILE_EXTENSION);
 
   private final Configuration conf;
   private String warehouseLocation;
   private HadoopFileIO defaultFileIo = null;
   private static final Joiner SLASH = Joiner.on("/");
-
-  private static final PathFilter TABLE_FILTER = path -> path.getName().endsWith(TABLE_METADATA_FILE_EXTENSION);
 
   /**
    * The constructor of the HadoopCatalog. It uses the passed location as its warehouse directory.
@@ -117,7 +116,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
 
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NotFoundException("Unknown namespace " + namespace);
+        throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
       }
 
       for (FileStatus s : fs.listStatus(nsPath)) {
@@ -220,7 +219,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
     try {
       fs.mkdirs(nsPath);
     } catch (IOException e) {
-      throw new RuntimeIOException("Create namespace failed: %s", e.getMessage());
+      throw new RuntimeIOException("Create namespace failed: %s", namespace.toString(), e.getMessage());
     }
   }
 
@@ -233,7 +232,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
     FileSystem fs = Util.getFs(nsPath, conf);
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NoSuchNamespaceException("Unknown namespace " + namespace.toString());
+        throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
       }
 
       List<String> pathList =  Stream.of(fs.listStatus(nsPath)).map(FileStatus::getPath)
@@ -256,13 +255,15 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
   }
 
   @Override
-  public boolean dropNamespace(Namespace namespace) {
-    Preconditions.checkArgument(!namespace.isEmpty(), "Your Namespace must be not empty!");
-    Preconditions.checkArgument(listTables(namespace).size() == 0,
-        "This Namespace have tables, cannot drop it");
-    Preconditions.checkArgument(listNamespaces(namespace).size() == 0,
-        "This Namespace have sub Namespace, cannot drop it");
-
+  public boolean dropNamespace(Namespace namespace, boolean cascade) {
+    if (!cascade) {
+      Preconditions.checkArgument(!namespace.isEmpty(),
+          "namespace does not exist: %s", namespace.toString());
+      Preconditions.checkArgument(listTables(namespace).size() == 0,
+          "This Namespace have tables, cannot drop it");
+      Preconditions.checkArgument(listNamespaces(namespace).size() == 0,
+          "This Namespace have sub Namespace, cannot drop it");
+    }
     Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
 
@@ -275,14 +276,14 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
 
   @Override
   public Map<String, String> loadNamespaceMetadata(Namespace namespace) {
-    Preconditions.checkArgument(!namespace.isEmpty(), "Your Namespace must be not empty!");
-    Joiner slash = Joiner.on("/");
-    Path nsPath = new Path(slash.join(warehouseLocation, slash.join(namespace.levels())));
+    Preconditions.checkArgument(!namespace.isEmpty(),
+        "namespace does not exist: %s", namespace.toString());
+    Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     Map<String, String> meta = new HashMap<>();
     FileSystem fs = Util.getFs(nsPath, conf);
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NoSuchNamespaceException("Unknown namespace " + nsPath);
+        throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
       }
       FileStatus info = fs.getFileStatus(nsPath);
       meta.put("owner", info.getOwner());

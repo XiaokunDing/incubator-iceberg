@@ -202,6 +202,5 @@ class TestTables {
         throw new RuntimeIOException("Failed to delete file: " + path);
       }
     }
-
   }
 }
