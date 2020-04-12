@@ -173,9 +173,9 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
   @Override
   public void createNamespace(Namespace namespace, Map<String, String> meta) {
     Preconditions.checkArgument(!namespace.isEmpty(),
-        "Cannot create namespace with invalid name: %s", namespace.toString());
+        "Cannot create namespace with invalid name: %s", namespace);
     Preconditions.checkArgument(namespace.levels().length == 1,
-        "Cannot support multi part namespace in Hive MetaStore: %s", namespace.toString());
+        "Cannot support multi part namespace in Hive MetaStore: %s", namespace);
     try {
       clients.run(client -> {
         client.createDatabase(convertToDatabase(namespace, meta));
@@ -184,21 +184,22 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
 
     } catch (AlreadyExistsException e) {
       throw new org.apache.iceberg.exceptions.AlreadyExistsException("Namespace '%s' already exists!",
-            namespace.toString());
+            namespace);
 
     } catch (TException e) {
       throw new RuntimeException("Failed to create namespace " + namespace.toString() + " in Hive MataStore", e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted in call to createDatabase(name)" + namespace.toString(), e);
+      throw new RuntimeException(
+          "Interrupted in call to createDatabase(name) " + namespace.toString() + " in Hive MataStore", e);
     }
   }
 
   @Override
   public List<Namespace> listNamespaces(Namespace namespace) {
     if (namespace.levels().length > 1) {
-      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
+      throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
     }
 
     try {
@@ -208,18 +209,19 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
           .stream().map(name -> Namespace.of(name))
           .collect(Collectors.toList());
     } catch (TException e) {
-      throw new RuntimeException("Failed to list all namespace: " + namespace.toString(),  e);
+      throw new RuntimeException("Failed to list all namespace: " + namespace.toString() + " in Hive MataStore",  e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted in call to getAllDatabases()" + namespace.toString(), e);
+      throw new RuntimeException(
+          "Interrupted in call to getAllDatabases()" + namespace.toString() + " in Hive MataStore", e);
     }
   }
 
   @Override
   public boolean dropNamespace(Namespace namespace) {
     if (namespace.levels().length != 1) {
-      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
+      throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
     }
 
     try {
@@ -234,14 +236,15 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
       return true;
 
     } catch (NoSuchObjectException e) {
-      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
+      throw new NoSuchNamespaceException("Namespace %s does not exist: %s", namespace, e);
 
     } catch (TException e) {
-      throw new RuntimeException("Failed to drop namespace " + namespace.toString(), e);
+      throw new RuntimeException("Failed to drop namespace " + namespace.toString() + " in Hive MataStore", e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted in call to drop dropDatabase(name)" + namespace.toString(), e);
+      throw new RuntimeException(
+          "Interrupted in call to drop dropDatabase(name)" + namespace.toString() + " in Hive MataStore", e);
     }
   }
 
@@ -265,18 +268,17 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
         return null;
       });
       return true;
-    } catch (NoSuchObjectException e) {
-      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
-
-    } catch (UnknownDBException e) {
-      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
+    } catch (NoSuchObjectException | UnknownDBException e) {
+      throw new NoSuchNamespaceException("Namespace %s does not exist: %s", namespace.toString(), e);
 
     } catch (TException e) {
-      throw new RuntimeException("Failed to list namespace under namespace: %s" + namespace.toString(), e);
+      throw new RuntimeException(
+          "Failed to list namespace under namespace: " + namespace.toString() + " in Hive MataStore", e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted in call to getDatabase(name)" + namespace.toString(), e);
+      throw new RuntimeException(
+          "Interrupted in call to getDatabase(name)" + namespace.toString() + " in Hive MataStore", e);
     }
 
   }
@@ -284,25 +286,24 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
   @Override
   public Map<String, String> loadNamespaceMetadata(Namespace namespace) {
     if (namespace.levels().length != 1) {
-      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
+      throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
     }
 
     try {
       Database database = clients.run(client -> client.getDatabase(namespace.toString()));
       return convertToMetadata(database);
 
-    } catch (NoSuchObjectException e) {
-      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
-
-    } catch (UnknownDBException e) {
-      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
+    } catch (NoSuchObjectException | UnknownDBException e) {
+      throw new NoSuchNamespaceException("Namespace %s does not exist: %s", namespace, e);
 
     } catch (TException e) {
-      throw new RuntimeException("Failed to list namespace under namespace: %s" + namespace.toString(), e);
+      throw new RuntimeException(
+          "Failed to list namespace under namespace: " + namespace.toString() + " in Hive MataStore", e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new RuntimeException("Interrupted in call to getDatabase(name)" + namespace.toString(), e);
+      throw new RuntimeException(
+          "Interrupted in call to getDatabase(name)" + namespace.toString() + " in Hive MataStore", e);
     }
   }
 
@@ -346,7 +347,7 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
     String warehouseLocation = conf.get("hive.metastore.warehouse.dir");
 
     if (namespace.levels().length != 1) {
-      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
+      throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
     }
     if (!meta.containsKey("location")) {
       Preconditions.checkNotNull(warehouseLocation,

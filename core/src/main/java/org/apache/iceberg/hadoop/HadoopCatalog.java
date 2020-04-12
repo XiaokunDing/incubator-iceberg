@@ -67,12 +67,12 @@ import org.apache.iceberg.exceptions.RuntimeIOException;
 public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, SupportsNamespaces {
   private static final String ICEBERG_HADOOP_WAREHOUSE_BASE = "iceberg/warehouse";
   private static final String TABLE_METADATA_FILE_EXTENSION = ".metadata.json";
+  private static final Joiner SLASH = Joiner.on("/");
   private static final PathFilter TABLE_FILTER = path -> path.getName().endsWith(TABLE_METADATA_FILE_EXTENSION);
 
   private final Configuration conf;
   private String warehouseLocation;
   private HadoopFileIO defaultFileIo = null;
-  private static final Joiner SLASH = Joiner.on("/");
 
   /**
    * The constructor of the HadoopCatalog. It uses the passed location as its warehouse directory.
@@ -117,7 +117,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
 
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
+        throw new NoSuchNamespaceException("Namespace does not exist: " + namespace);
       }
 
       for (FileStatus s : fs.listStatus(nsPath)) {
@@ -137,7 +137,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
         }
       }
     } catch (IOException ioe) {
-      throw new RuntimeIOException("Failed to list tables under " + namespace, ioe);
+      throw new RuntimeIOException(ioe, "Failed to list tables under: %s ", namespace);
     }
 
     return Lists.newArrayList(tblIdents);
@@ -211,20 +211,20 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
   @Override
   public void createNamespace(Namespace namespace, Map<String, String> meta) {
     Preconditions.checkArgument(!namespace.isEmpty(),
-        "Cannot create namespace with invalid name: %s", namespace.toString());
+        "Cannot create namespace with invalid name: %s", namespace);
     Preconditions.checkArgument(meta == null || meta.size() == 0,
-        "Hadoop Catalog not support namespace metaData: %s", namespace.toString());
+        "Hadoop Catalog not support namespace metaData: %s", namespace);
     Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
 
     try {
       if (isNamespace(fs, nsPath)) {
         throw new org.apache.iceberg.exceptions.AlreadyExistsException("Namespace '%s' already exists!",
-            namespace.toString());
+            namespace);
       }
       fs.mkdirs(nsPath);
     } catch (IOException e) {
-      throw new RuntimeIOException("Create namespace failed: %s", namespace.toString(), e.getMessage());
+      throw new RuntimeIOException(e, "Create namespace failed: %s", namespace);
     }
   }
 
@@ -236,7 +236,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
     FileSystem fs = Util.getFs(nsPath, conf);
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace.toString());
+        throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
       }
 
       List<String> pathList =  Stream.of(fs.listStatus(nsPath)).map(FileStatus::getPath)
@@ -251,7 +251,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
         namespaceList.add(Namespace.of(namespaces));
       }
     } catch (IOException ioe) {
-      throw new RuntimeIOException("Failed to list namespace under: " + namespace.toString(), ioe);
+      throw new RuntimeIOException(ioe, "Failed to list namespace under: %s", namespace);
     }
 
     return namespaceList;
@@ -265,11 +265,11 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
     try {
       if (!isNamespace(fs, nsPath)) {
         throw new org.apache.iceberg.exceptions.NoSuchNamespaceException(
-            "Namespace does not exist: %s", namespace.toString());
+            "Namespace does not exist: %s", namespace);
       }
       return fs.delete(nsPath, true /* recursive */);
     } catch (IOException e) {
-      throw new RuntimeIOException("Namespace delete failed :", namespace.toString(), e.getMessage());
+      throw new RuntimeIOException(e, "Namespace delete failed: %s", namespace);
     }
   }
 
@@ -282,7 +282,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
   @Override
   public Map<String, String> loadNamespaceMetadata(Namespace namespace) {
     if (namespace.isEmpty()) {
-      throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace.toString());
+      throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
     }
 
     Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
@@ -290,13 +290,13 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
     FileSystem fs = Util.getFs(nsPath, conf);
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace.toString());
+        throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
       }
       FileStatus info = fs.getFileStatus(nsPath);
       meta.put("name", namespace.toString());
       meta.put("location", info.getPath().toString());
     } catch (IOException ioe) {
-      throw new RuntimeIOException("Failed to list namespace info " + namespace, ioe);
+      throw new RuntimeIOException(ioe, "Failed to list namespace info: %s ", namespace);
     }
     return meta;
   }
@@ -309,7 +309,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
         return true;
       }
     } catch (IOException ioe) {
-      throw new RuntimeIOException("Failed to list namespace info " + path, ioe);
+      throw new RuntimeIOException(ioe, "Failed to list namespace %s info: %s ", path);
     }
     return false;
   }

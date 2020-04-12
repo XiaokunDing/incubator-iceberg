@@ -133,12 +133,12 @@ public class TestHiveCatalog extends HiveMetastoreTest {
 
     Assert.assertTrue("Drop namespace " + namespace.toString() + " error ", catalog.dropNamespace(namespace));
     AssertHelpers.assertThrows("Should fail to drop when namespace doesn't exist", NoSuchNamespaceException.class,
-        "Namespace does not exist:", () -> {
+        "Namespace db.ns1 does not exist: ", () -> {
           catalog.dropNamespace(Namespace.of("db.ns1"));
         });
     AssertHelpers.assertThrows("Should fail to drop namespace exist" + namespace.toString(),
         org.apache.iceberg.exceptions.NoSuchNamespaceException.class,
-        "Namespace does not exist: " + namespace.toString(), () -> {
+        "Namespace " + namespace.toString() + " does not exist: ", () -> {
           catalog.loadNamespaceMetadata(namespace);
         });
   }
