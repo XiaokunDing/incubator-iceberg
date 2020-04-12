@@ -21,10 +21,9 @@ package org.apache.iceberg.hive;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
 import java.io.Closeable;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -179,13 +178,13 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
         "Cannot support multi part namespace in Hive MetaStore: %s", namespace.toString());
     try {
       clients.run(client -> {
-        client.createDatabase(nameSpaceToHiveDb(namespace, meta));
+        client.createDatabase(convertToDatabase(namespace, meta));
         return null;
       });
 
     } catch (AlreadyExistsException e) {
-      throw new org.apache.iceberg.exceptions.AlreadyExistsException("Namespace %s already exists:",
-            namespace.toString(), e.getMessage());
+      throw new org.apache.iceberg.exceptions.AlreadyExistsException("Namespace '%s' already exists!",
+            namespace.toString());
 
     } catch (TException e) {
       throw new RuntimeException("Failed to create namespace " + namespace.toString() + " in Hive MataStore", e);
@@ -198,20 +197,16 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
 
   @Override
   public List<Namespace> listNamespaces(Namespace namespace) {
-    if (!namespace.isEmpty() && namespace.levels().length != 1) {
-      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
+    if (namespace.levels().length > 1) {
+      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
     }
-    List<Namespace> namespaces = new ArrayList<>();
-    List<String> dbs;
+
     try {
-      dbs = namespace.isEmpty() ? clients.run(HiveMetaStoreClient::getAllDatabases) :
-           clients.run(client -> client.getDatabases(namespace.level(0)));
-      for (String db : dbs) {
-        namespaces.add(Namespace.of(db));
-      }
-
-      return namespaces;
-
+      return namespace.isEmpty() ? clients.run(HiveMetaStoreClient::getAllDatabases)
+          .stream().map(name -> Namespace.of(name))
+          .collect(Collectors.toList()) : clients.run(client -> client.getDatabases(namespace.level(0)))
+          .stream().map(name -> Namespace.of(name))
+          .collect(Collectors.toList());
     } catch (TException e) {
       throw new RuntimeException("Failed to list all namespace: " + namespace.toString(),  e);
 
@@ -222,20 +217,24 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
   }
 
   @Override
-  public boolean dropNamespace(Namespace namespace, boolean cascade) {
-    if (namespace.isEmpty() || namespace.levels().length != 1) {
-      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
+  public boolean dropNamespace(Namespace namespace) {
+    if (namespace.levels().length != 1) {
+      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
     }
+
     try {
       clients.run(client -> {
-        client.dropDatabase(namespace.level(0), false, false, cascade);
+        client.dropDatabase(namespace.level(0),
+            false /* deleteData */,
+            false /* ignoreUnknownDb */,
+            true /* cascade */);
         return null;
       });
 
       return true;
 
     } catch (NoSuchObjectException e) {
-      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString(), e.getMessage());
+      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
 
     } catch (TException e) {
       throw new RuntimeException("Failed to drop namespace " + namespace.toString(), e);
@@ -247,19 +246,56 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
   }
 
   @Override
-  public Map<String, String> loadNamespaceMetadata(Namespace namespace) {
-    if (namespace.isEmpty() || namespace.levels().length != 1) {
-      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
+  public boolean setNamespaceMetadata(Namespace namespace, Map<String, String> meta) {
+    Map<String, String> currentMeta = loadNamespaceMetadata(namespace);
+    if (meta.containsKey("location")) {
+      throw new UnsupportedOperationException(
+          "Does not support change 'location' in HiveCatalog: " + namespace.toString());
     }
-    try {
-      Database database = clients.run(client -> client.getDatabase(namespace.toString()));
-      return getMetafrpmhiveDb(database);
+    if (meta.containsKey("name")) {
+      throw new UnsupportedOperationException(
+          "Does not support change 'name' in HiveCatalog: " + namespace.toString());
+    }
 
+    meta.forEach(currentMeta::put);
+    Database currentDb = convertToDatabase(namespace, currentMeta);
+    try {
+      clients.run(client -> {
+        client.alterDatabase(namespace.toString(), currentDb);
+        return null;
+      });
+      return true;
     } catch (NoSuchObjectException e) {
-      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString(), e.getMessage());
+      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
 
     } catch (UnknownDBException e) {
-      throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString(), e.getMessage());
+      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
+
+    } catch (TException e) {
+      throw new RuntimeException("Failed to list namespace under namespace: %s" + namespace.toString(), e);
+
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException("Interrupted in call to getDatabase(name)" + namespace.toString(), e);
+    }
+
+  }
+
+  @Override
+  public Map<String, String> loadNamespaceMetadata(Namespace namespace) {
+    if (namespace.levels().length != 1) {
+      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
+    }
+
+    try {
+      Database database = clients.run(client -> client.getDatabase(namespace.toString()));
+      return convertToMetadata(database);
+
+    } catch (NoSuchObjectException e) {
+      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
+
+    } catch (UnknownDBException e) {
+      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString(), e.getMessage());
 
     } catch (TException e) {
       throw new RuntimeException("Failed to list namespace under namespace: %s" + namespace.toString(), e);
@@ -295,8 +331,8 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
         tableIdentifier.name());
   }
 
-  public  Map<String, String> getMetafrpmhiveDb(Database database) {
-    Map<String, String> nameMap = new HashMap<>();
+  public  Map<String, String> convertToMetadata(Database database) {
+    Map<String, String> nameMap = Maps.newHashMap();
 
     nameMap.put("name", database.getName());
     nameMap.put("location", database.getLocationUri());
@@ -306,14 +342,19 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
     return nameMap;
   }
 
-  public  Database nameSpaceToHiveDb(Namespace namespace, Map<String, String> meta) {
+  public  Database convertToDatabase(Namespace namespace, Map<String, String> meta) {
     String warehouseLocation = conf.get("hive.metastore.warehouse.dir");
-    Preconditions.checkNotNull(warehouseLocation,
-        "Warehouse location is not set: hive.metastore.warehouse.dir=null");
-    Preconditions.checkArgument(!namespace.isEmpty(),
-        "Namespace could not empty. ");
+
+    if (namespace.levels().length != 1) {
+      throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
+    }
+    if (!meta.containsKey("location")) {
+      Preconditions.checkNotNull(warehouseLocation,
+          "Warehouse location is not set: hive.metastore.warehouse.dir=null");
+    }
+
     Database database  = new Database();
-    Map<String, String> parameter = new HashMap<>();
+    Map<String, String> parameter = Maps.newHashMap();
 
     database.setName(namespace.toString());
     database.setLocationUri(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())) + ".db");

@@ -22,11 +22,11 @@ package org.apache.iceberg.hadoop;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -110,13 +110,14 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
     Preconditions.checkArgument(namespace.levels().length >= 1,
         "Missing database in table identifier: %s", namespace);
 
-    Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
+    Joiner slash = Joiner.on("/");
+    Path nsPath = new Path(slash.join(warehouseLocation, slash.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
     Set<TableIdentifier> tblIdents = Sets.newHashSet();
 
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
+        throw new NoSuchNamespaceException("Namespace does not exist: " + namespace.toString());
       }
 
       for (FileStatus s : fs.listStatus(nsPath)) {
@@ -213,10 +214,14 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
         "Cannot create namespace with invalid name: %s", namespace.toString());
     Preconditions.checkArgument(meta == null || meta.size() == 0,
         "Hadoop Catalog not support namespace metaData: %s", namespace.toString());
-
     Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
+
     try {
+      if (isNamespace(fs, nsPath)) {
+        throw new org.apache.iceberg.exceptions.AlreadyExistsException("Namespace '%s' already exists!",
+            namespace.toString());
+      }
       fs.mkdirs(nsPath);
     } catch (IOException e) {
       throw new RuntimeIOException("Create namespace failed: %s", namespace.toString(), e.getMessage());
@@ -225,19 +230,17 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
 
   @Override
   public List<Namespace> listNamespaces(Namespace namespace) {
- //   Preconditions.checkArgument(!namespace.isEmpty(), "Your Namespace must be not empty!");
     List<Namespace> namespaceList = new ArrayList<>();
     String[] namespaces;
     Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
+        throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace.toString());
       }
 
       List<String> pathList =  Stream.of(fs.listStatus(nsPath)).map(FileStatus::getPath)
-          .collect(Collectors.toList()).stream().filter(path -> isNamespace(fs, path))
-          .map(Path::getName).collect(Collectors.toList());
+          .filter(path -> isNamespace(fs, path)).map(Path::getName).collect(Collectors.toList());
 
       for (String path : pathList) {
         if (!namespace.isEmpty()) {
@@ -255,42 +258,43 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
   }
 
   @Override
-  public boolean dropNamespace(Namespace namespace, boolean cascade) {
-    if (!cascade) {
-      Preconditions.checkArgument(!namespace.isEmpty(),
-          "namespace does not exist: %s", namespace.toString());
-      Preconditions.checkArgument(listTables(namespace).size() == 0,
-          "This Namespace have tables, cannot drop it");
-      Preconditions.checkArgument(listNamespaces(namespace).size() == 0,
-          "This Namespace have sub Namespace, cannot drop it");
-    }
+  public boolean dropNamespace(Namespace namespace) {
     Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
 
     try {
-      return fs.delete(nsPath, true);
+      if (!isNamespace(fs, nsPath)) {
+        throw new org.apache.iceberg.exceptions.NoSuchNamespaceException(
+            "Namespace does not exist: %s", namespace.toString());
+      }
+      return fs.delete(nsPath, true /* recursive */);
     } catch (IOException e) {
       throw new RuntimeIOException("Namespace delete failed :", namespace.toString(), e.getMessage());
     }
   }
 
   @Override
+  public boolean setNamespaceMetadata(Namespace namespace, Map<String, String> meta) {
+    throw new  UnsupportedOperationException(
+        "Un support setNamespaceMetadata() in the HadoopCatalog: " + namespace.toString());
+  }
+
+  @Override
   public Map<String, String> loadNamespaceMetadata(Namespace namespace) {
-    Preconditions.checkArgument(!namespace.isEmpty(),
-        "namespace does not exist: %s", namespace.toString());
+    if (namespace.isEmpty()) {
+      throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace.toString());
+    }
+
     Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
-    Map<String, String> meta = new HashMap<>();
+    Map<String, String> meta = Maps.newHashMap();
     FileSystem fs = Util.getFs(nsPath, conf);
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NoSuchNamespaceException("namespace does not exist: " + namespace.toString());
+        throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace.toString());
       }
       FileStatus info = fs.getFileStatus(nsPath);
-      meta.put("owner", info.getOwner());
-      meta.put("group", info.getGroup());
-      meta.put("path", info.getPath().toString());
-      meta.put("modification_time", Long.toString(info.getModificationTime()));
-      meta.put("block_size", Long.toString(info.getBlockSize()));
+      meta.put("name", namespace.toString());
+      meta.put("location", info.getPath().toString());
     } catch (IOException ioe) {
       throw new RuntimeException("Failed to list namespace info " + namespace, ioe);
     }

@@ -134,7 +134,7 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Assert.assertTrue(tbls2.get(0).name().equals("tbl3"));
 
     AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
-        "namespace does not exist: ", () -> {
+        "Namespace does not exist: ", () -> {
         catalog.listTables(Namespace.of("db", "ns1", "ns2"));
       });
   }
@@ -166,7 +166,6 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Lists.newArrayList(tbl1, tbl2).forEach(t ->
         catalog.createNamespace(t.namespace(), meta)
     );
-
     String metaLocation1 = warehousePath + "/" + "db/ns1/ns2";
     FileSystem fs1 = Util.getFs(new Path(metaLocation1), conf);
     Assert.assertTrue(fs1.isDirectory(new Path(metaLocation1)));
@@ -174,6 +173,12 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     String metaLocation2 = warehousePath + "/" + "db/ns2/ns3";
     FileSystem fs2 = Util.getFs(new Path(metaLocation2), conf);
     Assert.assertTrue(fs2.isDirectory(new Path(metaLocation2)));
+
+    AssertHelpers.assertThrows("Should fail to create when namespace already exist: " + tbl1.namespace().toString(),
+        org.apache.iceberg.exceptions.AlreadyExistsException.class,
+        "Namespace '" + tbl1.namespace().toString() + "' already exists!", () -> {
+          catalog.createNamespace(tbl1.namespace());
+        });
   }
 
   @Test
@@ -209,8 +214,8 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Assert.assertEquals(tblSet2.size(), 2);
     Assert.assertTrue(tblSet2.contains("db"));
     Assert.assertTrue(tblSet2.contains("db2"));
-    AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
-        "namespace does not exist: ", () -> {
+    AssertHelpers.assertThrows("Should fail to list namespace doesn't exist", NoSuchNamespaceException.class,
+        "Namespace does not exist: ", () -> {
           catalog.listNamespaces(Namespace.of("db", "db2", "ns2"));
         });
   }
@@ -231,9 +236,20 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     );
     catalog.loadNamespaceMetadata(Namespace.of("db"));
 
-    AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
-        "namespace does not exist: ", () -> {
+    AssertHelpers.assertThrows("Should fail to load namespace doesn't exist", NoSuchNamespaceException.class,
+        "Namespace does not exist: ", () -> {
           catalog.loadNamespaceMetadata(Namespace.of("db", "db2", "ns2"));
+        });
+  }
+
+  @Test
+  public void testAlterNamespaceMeta() throws IOException {
+    Configuration conf = new Configuration();
+    String warehousePath = temp.newFolder().getAbsolutePath();
+    HadoopCatalog catalog = new HadoopCatalog(conf, warehousePath);
+    AssertHelpers.assertThrows("Should fail to change namespace", UnsupportedOperationException.class,
+        "Un support setNamespaceMetadata() in the HadoopCatalog: ", () -> {
+          catalog.setNamespaceMetadata(Namespace.of("db", "db2", "ns2"), meta);
         });
   }
 
@@ -250,20 +266,13 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
         catalog.createTable(t, SCHEMA, PartitionSpec.unpartitioned())
     );
 
-    AssertHelpers.assertThrows("should throw exception", IllegalArgumentException.class,
-        "This Namespace have tables, cannot drop it", () -> {
-          catalog.dropNamespace(Namespace.of("db"), false);
+    AssertHelpers.assertThrows("Should fail to drop namespace doesn't exist",
+        org.apache.iceberg.exceptions.NoSuchNamespaceException.class,
+        "Namespace does not exist: ", () -> {
+          catalog.dropNamespace(Namespace.of("db2.ns2"));
         });
-    AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
-        "namespace does not exist: ", () -> {
-          catalog.dropNamespace(Namespace.of("db.ns1"), false);
-        });
-    AssertHelpers.assertThrows("should throw exception", IllegalArgumentException.class,
-        "This Namespace have sub Namespace, cannot drop it", () -> {
-          catalog.dropNamespace(Namespace.of("db1"), false);
-        });
-    catalog.dropTable(tbl1);
-    catalog.dropNamespace(Namespace.of("db"), false);
+    Assert.assertTrue(catalog.dropNamespace(Namespace.of("db")));
+    Assert.assertTrue(catalog.dropNamespace(Namespace.of("db1")));
     String metaLocation = warehousePath + "/" + "db";
     FileSystem fs = Util.getFs(new Path(metaLocation), conf);
     Assert.assertFalse(fs.isDirectory(new Path(metaLocation)));
