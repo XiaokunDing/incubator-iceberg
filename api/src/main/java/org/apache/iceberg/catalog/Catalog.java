@@ -304,13 +304,15 @@ public interface Catalog {
    */
   Table loadTable(TableIdentifier identifier);
 
-
   /**
    * Create a namespace in the catalog.
    *
    * @param namespace {@link Namespace}.
    */
-  boolean createNamespace(Namespace namespace);
+  default void createNamespace(Namespace namespace, Map<String, String> meta) {
+    throw new UnsupportedOperationException(
+        "The catalog" + this.toString()  + "is not Support createNamespace(namespace, meta).");
+  }
 
   /**
    * List top-level namespaces from the catalog.
@@ -321,7 +323,9 @@ public interface Catalog {
    *
    * @return an List of namespace {@link Namespace} names
    */
-  List<Namespace> listNamespaces();
+  default List<Namespace> listNamespaces() {
+    return listNamespaces(Namespace.empty());
+  }
 
   /**
    * List  namespaces from the namespace.
@@ -331,7 +335,10 @@ public interface Catalog {
    *
    * @return an List of namespace {@link Namespace} names
    */
-  List<Namespace> listNamespaces(Namespace namespace);
+  default List<Namespace> listNamespaces(Namespace namespace) {
+    throw new UnsupportedOperationException(
+        "The catalog" + this.toString()  + "is not Support listNamespaces(" + namespace + ").");
+  }
 
   /**
    * Load metadata properties for a namespace.
@@ -339,7 +346,10 @@ public interface Catalog {
    * @param namespace a Namespace.of(name) {@link Namespace}
    * @return a string map of properties for the given namespace
    */
-  Map<String, String>  loadNamespaceMetadata(Namespace namespace);
+  default Map<String, String> loadNamespaceMetadata(Namespace namespace) {
+    throw new UnsupportedOperationException(
+        "The catalog" + this.toString()  + "is not Support loadNamespaceMetadata(namespace).");
+  }
 
   /**
    * Drop namespace, while the namespace haven't table or sub namespace will return true.
@@ -347,6 +357,14 @@ public interface Catalog {
    * @param namespace a Namespace.of(name) {@link Namespace}
    * @return true while drop success.
    */
-  boolean dropNamespace(Namespace namespace);
+  default boolean dropNamespace(Namespace namespace) {
+    throw new UnsupportedOperationException(
+        "The catalog" + this.toString()  + "is not Support dropNamespace(namespace).");
+  }
+
+  default boolean alterNamespace(Namespace namespace) {
+    throw new UnsupportedOperationException(
+        "The catalog" + this.toString()  + "is not Support alterNamespace(namespace).");
+  }
 
 }

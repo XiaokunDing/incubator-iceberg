@@ -203,12 +203,5 @@ class TestTables {
       }
     }
 
-    @Override
-    public boolean mkdir(String path) {
-      if (!new File(path).mkdir()) {
-        throw new RuntimeIOException("Failed to mkdir: " + path);
-      }
-      return true;
-    }
   }
 }

@@ -30,6 +30,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -43,10 +45,10 @@ import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.exceptions.RuntimeIOException;
-import org.apache.iceberg.io.FileIO;
 
 /**
  * HadoopCatalog provides a way to use table names like db.table to work with path-based tables under a common
@@ -69,6 +71,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
   private final Configuration conf;
   private String warehouseLocation;
   private HadoopFileIO defaultFileIo = null;
+  private static final Joiner SLASH = Joiner.on("/");
 
   private static final PathFilter TABLE_FILTER = path -> path.getName().endsWith(TABLE_METADATA_FILE_EXTENSION);
 
@@ -108,8 +111,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
     Preconditions.checkArgument(namespace.levels().length >= 1,
         "Missing database in table identifier: %s", namespace);
 
-    Joiner slash = Joiner.on("/");
-    Path nsPath = new Path(slash.join(warehouseLocation, slash.join(namespace.levels())));
+    Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
     Set<TableIdentifier> tblIdents = Sets.newHashSet();
 
@@ -207,60 +209,50 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
   }
 
   @Override
-  public boolean createNamespace(Namespace namespace) {
-    Preconditions.checkArgument(!namespace.isEmpty(), "Your Namespace must be not empty!");
-    Joiner slash = Joiner.on("/");
-    Path nsPath = new Path(slash.join(warehouseLocation, slash.join(namespace.levels())));
-    return io().mkdir(nsPath.toString());
-  }
+  public void createNamespace(Namespace namespace, Map<String, String> meta) {
+    Preconditions.checkArgument(!namespace.isEmpty(),
+        "Cannot create namespace with invalid name: %s", namespace.toString());
+    Preconditions.checkArgument(meta == null || meta.size() == 0,
+        "Hadoop Catalog not support namespace metaData: %s", namespace.toString());
 
-  @Override
-  public List<Namespace> listNamespaces() {
-    return listNamespaces(Namespace.empty());
+    Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
+    FileSystem fs = Util.getFs(nsPath, conf);
+    try {
+      fs.mkdirs(nsPath);
+    } catch (IOException e) {
+      throw new RuntimeIOException("Create namespace failed: %s", e.getMessage());
+    }
   }
 
   @Override
   public List<Namespace> listNamespaces(Namespace namespace) {
  //   Preconditions.checkArgument(!namespace.isEmpty(), "Your Namespace must be not empty!");
-    List<Namespace> namespaces = new ArrayList<>();
-    String[] nsp;
-    Joiner slash = Joiner.on("/");
-    Path nsPath = new Path(slash.join(warehouseLocation, slash.join(namespace.levels())));
+    List<Namespace> namespaceList = new ArrayList<>();
+    String[] namespaces;
+    Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NotFoundException("Unknown namespace " + namespace);
+        throw new NoSuchNamespaceException("Unknown namespace " + namespace.toString());
       }
 
-      for (FileStatus s : fs.listStatus(nsPath)) {
-        Path path = s.getPath();
-        if (!fs.isDirectory(path)) {
-          // Ignore the path which is not a directory.
-          continue;
-        }
-        Path metadataPath = new Path(path, "metadata");
-        if (fs.exists(metadataPath) && fs.isDirectory(metadataPath) &&
-            (fs.listStatus(metadataPath, TABLE_FILTER).length >= 1)) {
-        // Ignore the path of table
-          continue;
-        }
+      List<String> pathList =  Stream.of(fs.listStatus(nsPath)).map(FileStatus::getPath)
+          .collect(Collectors.toList()).stream().filter(path -> isNamespace(fs, path))
+          .map(Path::getName).collect(Collectors.toList());
 
-        if (fs.exists(path) && fs.isDirectory(path)) {
-          // Only the path which contains metadata is the path for table, otherwise it could be
-          // still a namespace.
-          if (!namespace.isEmpty()) {
-            nsp = (namespace.toString() + "." + path.getName()).split("\\.");
-          } else {
-            nsp = new String[] {path.getName()};
-          }
-          namespaces.add(Namespace.of(nsp));
+      for (String path : pathList) {
+        if (!namespace.isEmpty()) {
+          namespaces = Namespace.of(namespace.toString() + "." + path).levels();
+        } else {
+          namespaces = new String[]{path};
         }
+        namespaceList.add(Namespace.of(namespaces));
       }
     } catch (IOException ioe) {
-      throw new RuntimeException("Failed to list namespace under " + namespace, ioe);
+      throw new RuntimeException("Failed to list namespace under: " + namespace.toString(), ioe);
     }
 
-    return namespaces;
+    return namespaceList;
   }
 
   @Override
@@ -271,10 +263,14 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
     Preconditions.checkArgument(listNamespaces(namespace).size() == 0,
         "This Namespace have sub Namespace, cannot drop it");
 
-    Joiner slash = Joiner.on("/");
-    Path nsPath = new Path(slash.join(warehouseLocation, slash.join(namespace.levels())));
-    io().deleteFile(nsPath.toString());
-    return true;
+    Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
+    FileSystem fs = Util.getFs(nsPath, conf);
+
+    try {
+      return fs.delete(nsPath, true);
+    } catch (IOException e) {
+      throw new RuntimeIOException("Namespace delete failed :", namespace.toString(), e.getMessage());
+    }
   }
 
   @Override
@@ -286,7 +282,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
     FileSystem fs = Util.getFs(nsPath, conf);
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NotFoundException("Unknown namespace " + nsPath);
+        throw new NoSuchNamespaceException("Unknown namespace " + nsPath);
       }
       FileStatus info = fs.getFileStatus(nsPath);
       meta.put("owner", info.getOwner());
@@ -300,14 +296,21 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable {
     return meta;
   }
 
+  private boolean isNamespace(FileSystem fs, Path path) {
+    Path metadataPath = new Path(path, "metadata");
+    try {
+      if (fs.isDirectory(path) && !(fs.exists(metadataPath) && fs.isDirectory(metadataPath) &&
+          (fs.listStatus(metadataPath, TABLE_FILTER).length >= 1))) {
+        return true;
+      }
+    } catch (IOException ioe) {
+      throw new RuntimeException("Failed to list namespace info " + path, ioe);
+    }
+    return false;
+  }
+
   @Override
   public void close() throws IOException {
   }
 
-  public FileIO io() {
-    if (defaultFileIo == null) {
-      defaultFileIo = new HadoopFileIO(conf);
-    }
-    return defaultFileIo;
-  }
 }

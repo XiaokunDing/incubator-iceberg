@@ -19,6 +19,7 @@
 
 package org.apache.iceberg.hive;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -29,67 +30,59 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class TestHiveCatalog extends HiveMetastoreTest {
+
+  private static Map meta = new HashMap<String, String>() {
+    {
+      put("owner", "apache");
+      put("group", "iceberg");
+      put("comment", "iceberg  hiveCatalog test");
+    }
+  };
+
   @Test
   public void testCreateNamespace() throws TException {
     Namespace namespace = Namespace.of("dbname");
-    namespace.setParameters("owner", "apache");
-    namespace.setParameters("group", "iceberg");
 
-    catalog.createNamespace(namespace);
+    catalog.createNamespace(namespace, meta);
 
     Database database = metastoreClient.getDatabase(namespace.toString());
     Map<String, String> dbMeta = catalog.getMetafrpmhiveDb(database);
     Assert.assertTrue(dbMeta.get("owner").equals("apache"));
     Assert.assertTrue(dbMeta.get("group").equals("iceberg"));
     Assert.assertEquals("there no same location for db and namespace",
-        dbMeta.get("location"), catalog.nameSpaceToHiveDb(namespace).getLocationUri());
+        dbMeta.get("location"), catalog.nameSpaceToHiveDb(namespace, meta).getLocationUri());
   }
 
   @Test
   public void testListNamespace() throws TException {
     Namespace namespace1 = Namespace.of("dbname1");
-    namespace1.setParameters("owner", "apache1");
-    namespace1.setParameters("group", "iceberg1");
-    catalog.createNamespace(namespace1);
+    catalog.createNamespace(namespace1, meta);
 
     Namespace namespace2 = Namespace.of("dbname2");
-    namespace2.setParameters("owner", "apache2");
-    namespace2.setParameters("group", "iceberg2");
-    catalog.createNamespace(namespace2);
-
+    catalog.createNamespace(namespace2, meta);
     List<Namespace> namespaces = catalog.listNamespaces();
-
     Assert.assertTrue("hive db not hive the namespace 'dbname1'", namespaces.contains(namespace1));
     Assert.assertTrue("hive db not hive the namespace 'dbname2'", namespaces.contains(namespace2));
-    for (Namespace namespace : namespaces) {
-      if (namespace.toString().equals(namespace1)) {
-        Assert.assertEquals("the metadata is not echo",
-            namespace.getParameters("owner"), namespace1.getParameters("owner"));
-      }
-    }
   }
 
   @Test
   public void testLoadNamespaceMeta() throws TException {
     Namespace namespace = Namespace.of("dbname_load");
-    namespace.setParameters("owner", "apache");
-    namespace.setParameters("group", "iceberg");
-    catalog.createNamespace(namespace);
+
+    catalog.createNamespace(namespace, meta);
 
     Map<String, String> nameMata = catalog.loadNamespaceMetadata(namespace);
     Assert.assertTrue(nameMata.get("owner").equals("apache"));
     Assert.assertTrue(nameMata.get("group").equals("iceberg"));
     Assert.assertEquals("there no same location for db and namespace",
-        nameMata.get("location"), catalog.nameSpaceToHiveDb(namespace).getLocationUri());
+        nameMata.get("location"), catalog.nameSpaceToHiveDb(namespace, meta).getLocationUri());
   }
 
   @Test
   public void testDropNamespace() throws TException {
 
     Namespace namespace = Namespace.of("dbname_drop");
-    namespace.setParameters("owner", "apache");
-    namespace.setParameters("group", "iceberg");
-    catalog.createNamespace(namespace);
+    catalog.createNamespace(namespace, meta);
 
     Map<String, String> nameMata = catalog.loadNamespaceMetadata(namespace);
     Assert.assertTrue(nameMata.get("owner").equals("apache"));

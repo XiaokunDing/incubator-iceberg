@@ -59,10 +59,4 @@ public interface FileIO extends Serializable {
     deleteFile(file.location());
   }
 
-  /**
-   * make a path on file system
-   * @return
-   */
-  boolean mkdir(String path);
-
 }

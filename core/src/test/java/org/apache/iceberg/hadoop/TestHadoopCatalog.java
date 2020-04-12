@@ -22,7 +22,9 @@ package org.apache.iceberg.hadoop;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -33,11 +35,14 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NotFoundException;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class TestHadoopCatalog extends HadoopTableTestBase {
+  private static Map meta = new HashMap();
+
   @Test
   public void testBasicCatalog() throws Exception {
     Configuration conf = new Configuration();
@@ -160,7 +165,7 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     TableIdentifier tbl2 = TableIdentifier.of("db", "ns2", "ns3", "tbl2");
 
     Lists.newArrayList(tbl1, tbl2).forEach(t ->
-        catalog.createNamespace(t.namespace())
+        catalog.createNamespace(t.namespace(), meta)
     );
 
     String metaLocation1 = warehousePath + "/" + "db/ns1/ns2";
@@ -205,7 +210,7 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Assert.assertEquals(tblSet2.size(), 2);
     Assert.assertTrue(tblSet2.contains("db"));
     Assert.assertTrue(tblSet2.contains("db2"));
-    AssertHelpers.assertThrows("should throw exception", NotFoundException.class,
+    AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
         "Unknown namespace", () -> {
           catalog.listNamespaces(Namespace.of("db", "db2", "ns2"));
         });
@@ -225,10 +230,9 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Lists.newArrayList(tbl1, tbl2, tbl3, tbl4).forEach(t ->
         catalog.createTable(t, SCHEMA, PartitionSpec.unpartitioned())
     );
-
     catalog.loadNamespaceMetadata(Namespace.of("db"));
 
-    AssertHelpers.assertThrows("should throw exception", NotFoundException.class,
+    AssertHelpers.assertThrows("should throw exception", NoSuchNamespaceException.class,
         "Unknown namespace", () -> {
           catalog.loadNamespaceMetadata(Namespace.of("db", "db2", "ns2"));
         });
