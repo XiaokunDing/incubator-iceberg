@@ -256,7 +256,7 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     HadoopCatalog catalog = new HadoopCatalog(conf, warehousePath);
     AssertHelpers.assertThrows("Should fail to change namespace", UnsupportedOperationException.class,
         "Unsupported setNamespaceMetadata() in the HadoopCatalog: ", () -> {
-          catalog.alterNamespace(Namespace.of("db", "db2", "ns2"), meta);
+          catalog.alterNamespace(Namespace.of("db", "db2", "ns2"), (NamespaceChange) meta);
         });
   }
 
