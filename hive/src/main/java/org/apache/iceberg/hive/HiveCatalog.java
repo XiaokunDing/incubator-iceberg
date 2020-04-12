@@ -46,7 +46,6 @@ import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
-import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,7 +78,7 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
           .collect(Collectors.toList());
 
     } catch (UnknownDBException e) {
-      throw new NotFoundException(e, "Unknown namespace " + namespace);
+      throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
 
     } catch (TException e) {
       throw new RuntimeException("Failed to list all tables under namespace " + namespace, e);

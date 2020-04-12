@@ -153,8 +153,8 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Assert.assertEquals("1 table expected", 1, catalog.listTables(Namespace.of("ns1", "ns2")).size());
     catalog.dropTable(tableIdent, true);
   }
-  
- @Test
+
+  @Test
   public void testCreateNamespace() throws Exception {
     Configuration conf = new Configuration();
     String warehousePath = temp.newFolder().getAbsolutePath();
@@ -284,5 +284,5 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     FileSystem fs = Util.getFs(new Path(metaLocation), conf);
     Assert.assertFalse(fs.isDirectory(new Path(metaLocation)));
   }
-  
 }
+
