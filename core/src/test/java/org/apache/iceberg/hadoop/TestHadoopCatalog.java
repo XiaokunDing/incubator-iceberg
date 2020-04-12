@@ -19,12 +19,11 @@
 
 package org.apache.iceberg.hadoop;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import java.io.IOException;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
@@ -40,7 +39,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 public class TestHadoopCatalog extends HadoopTableTestBase {
-  private static Map<String, String> meta = Maps.newHashMap();
+  private static ImmutableMap<String, String> meta = ImmutableMap.of();
 
   @Test
   public void testBasicCatalog() throws Exception {
@@ -166,6 +165,7 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Lists.newArrayList(tbl1, tbl2).forEach(t ->
         catalog.createNamespace(t.namespace(), meta)
     );
+
     String metaLocation1 = warehousePath + "/" + "db/ns1/ns2";
     FileSystem fs1 = Util.getFs(new Path(metaLocation1), conf);
     Assert.assertTrue(fs1.isDirectory(new Path(metaLocation1)));
@@ -174,9 +174,9 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     FileSystem fs2 = Util.getFs(new Path(metaLocation2), conf);
     Assert.assertTrue(fs2.isDirectory(new Path(metaLocation2)));
 
-    AssertHelpers.assertThrows("Should fail to create when namespace already exist: " + tbl1.namespace().toString(),
+    AssertHelpers.assertThrows("Should fail to create when namespace already exist: " + tbl1.namespace(),
         org.apache.iceberg.exceptions.AlreadyExistsException.class,
-        "Namespace '" + tbl1.namespace().toString() + "' already exists!", () -> {
+        "Namespace '" + tbl1.namespace() + "' already exists!", () -> {
           catalog.createNamespace(tbl1.namespace());
         });
   }
@@ -198,7 +198,6 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     );
 
     List<Namespace> nsp1 = catalog.listNamespaces(Namespace.of("db"));
-
     Set<String> tblSet = Sets.newHashSet(nsp1.stream().map(t -> t.toString()).iterator());
     Assert.assertEquals(tblSet.size(), 3);
     Assert.assertTrue(tblSet.contains("db.ns1"));
@@ -214,6 +213,13 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Assert.assertEquals(tblSet2.size(), 2);
     Assert.assertTrue(tblSet2.contains("db"));
     Assert.assertTrue(tblSet2.contains("db2"));
+
+    List<Namespace> nsp4 = catalog.listNamespaces(Namespace.empty());
+    Set<String> tblSet3 = Sets.newHashSet(nsp4.stream().map(t -> t.toString()).iterator());
+    Assert.assertEquals(tblSet3.size(), 2);
+    Assert.assertTrue(tblSet3.contains("db"));
+    Assert.assertTrue(tblSet3.contains("db2"));
+
     AssertHelpers.assertThrows("Should fail to list namespace doesn't exist", NoSuchNamespaceException.class,
         "Namespace does not exist: ", () -> {
           catalog.listNamespaces(Namespace.of("db", "db2", "ns2"));
@@ -249,7 +255,7 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     HadoopCatalog catalog = new HadoopCatalog(conf, warehousePath);
     AssertHelpers.assertThrows("Should fail to change namespace", UnsupportedOperationException.class,
         "Unsupported setNamespaceMetadata() in the HadoopCatalog: ", () -> {
-          catalog.setNamespaceMetadata(Namespace.of("db", "db2", "ns2"), meta);
+          catalog.alterNamespace(Namespace.of("db", "db2", "ns2"), meta);
         });
   }
 

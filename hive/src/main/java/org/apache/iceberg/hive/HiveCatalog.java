@@ -21,6 +21,7 @@ package org.apache.iceberg.hive;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import java.io.Closeable;
 import java.util.Arrays;
@@ -77,10 +78,10 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
           .collect(Collectors.toList());
 
     } catch (UnknownDBException e) {
-      throw new NotFoundException(e, "Unknown namespace " + namespace.toString());
+      throw new NotFoundException(e, "Unknown namespace " + namespace);
 
     } catch (TException e) {
-      throw new RuntimeException("Failed to list all tables under namespace " + namespace.toString(), e);
+      throw new RuntimeException("Failed to list all tables under namespace " + namespace, e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
@@ -127,7 +128,7 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
       return false;
 
     } catch (TException e) {
-      throw new RuntimeException("Failed to drop " + identifier.toString(), e);
+      throw new RuntimeException("Failed to drop " + identifier, e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
@@ -163,7 +164,7 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
       throw new org.apache.iceberg.exceptions.AlreadyExistsException("Table already exists: %s", to);
 
     } catch (TException e) {
-      throw new RuntimeException("Failed to rename " + from.toString() + " to " + to.toString(), e);
+      throw new RuntimeException("Failed to rename " + from + " to " + to, e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
@@ -172,11 +173,14 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
   }
 
   @Override
-  public void createNamespace(Namespace namespace, Map<String, String> meta) {
-    Preconditions.checkArgument(!namespace.isEmpty(),
+  public void createNamespace(Namespace namespace, ImmutableMap<String, String> meta) {
+    Preconditions.checkArgument(
+        !namespace.isEmpty(),
         "Cannot create namespace with invalid name: %s", namespace);
-    Preconditions.checkArgument(namespace.levels().length == 1,
+    Preconditions.checkArgument(
+        namespace.levels().length == 1,
         "Cannot support multi part namespace in Hive MetaStore: %s", namespace);
+
     try {
       clients.run(client -> {
         client.createDatabase(convertToDatabase(namespace, meta));
@@ -184,16 +188,16 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
       });
 
     } catch (AlreadyExistsException e) {
-      throw new org.apache.iceberg.exceptions.AlreadyExistsException("Namespace '%s' already exists!",
+      throw new org.apache.iceberg.exceptions.AlreadyExistsException(e, "Namespace '%s' already exists!",
             namespace);
 
     } catch (TException e) {
-      throw new RuntimeException("Failed to create namespace " + namespace.toString() + " in Hive MataStore", e);
+      throw new RuntimeException("Failed to create namespace " + namespace + " in Hive MataStore", e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException(
-          "Interrupted in call to createDatabase(name) " + namespace.toString() + " in Hive MataStore", e);
+          "Interrupted in call to createDatabase(name) " + namespace + " in Hive MataStore", e);
     }
   }
 
@@ -204,15 +208,20 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
     }
 
     try {
-      return namespace.isEmpty() ? clients.run(HiveMetaStoreClient::getAllDatabases).stream().map(Namespace::of)
-          .collect(Collectors.toList()) : Stream.of(Namespace.empty()).collect(Collectors.toList());
+      return namespace.isEmpty() ? clients.run(
+          HiveMetaStoreClient::getAllDatabases)
+          .stream()
+          .map(Namespace::of)
+          .collect(Collectors.toList()) : Stream.of(Namespace.empty())
+          .collect(Collectors.toList());
+
     } catch (TException e) {
-      throw new RuntimeException("Failed to list all namespace: " + namespace.toString() + " in Hive MataStore",  e);
+      throw new RuntimeException("Failed to list all namespace: " + namespace + " in Hive MataStore",  e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException(
-          "Interrupted in call to getAllDatabases()" + namespace.toString() + " in Hive MataStore", e);
+          "Interrupted in call to getAllDatabases()" + namespace + " in Hive MataStore", e);
     }
   }
 
@@ -234,51 +243,51 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
       return true;
 
     } catch (NoSuchObjectException e) {
-      throw new NoSuchNamespaceException("Namespace %s does not exist: %s", namespace, e);
+      throw new NoSuchNamespaceException(e, "Namespace '%s' does not exist!", namespace);
 
     } catch (TException e) {
-      throw new RuntimeException("Failed to drop namespace " + namespace.toString() + " in Hive MataStore", e);
+      throw new RuntimeException("Failed to drop namespace " + namespace + " in Hive MataStore", e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException(
-          "Interrupted in call to drop dropDatabase(name)" + namespace.toString() + " in Hive MataStore", e);
+          "Interrupted in call to drop dropDatabase(name)" + namespace + " in Hive MataStore", e);
     }
   }
 
   @Override
-  public boolean setNamespaceMetadata(Namespace namespace, Map<String, String> meta) {
-    Map<String, String> currentMeta = loadNamespaceMetadata(namespace);
+  public boolean alterNamespace(Namespace namespace, ImmutableMap<String, String> meta) {
     if (meta.containsKey("location")) {
-      throw new UnsupportedOperationException(
-          "Does not support change 'location' in HiveCatalog: " + namespace.toString());
-    }
-    if (meta.containsKey("name")) {
-      throw new UnsupportedOperationException(
-          "Does not support change 'name' in HiveCatalog: " + namespace.toString());
+      throw new UnsupportedOperationException("Does not support change 'location' in HiveCatalog: " + namespace);
     }
 
-    meta.forEach(currentMeta::put);
-    Database currentDb = convertToDatabase(namespace, currentMeta);
+    if (meta.containsKey("name")) {
+      throw new UnsupportedOperationException("Does not support change 'name' in HiveCatalog: " + namespace);
+    }
+
+    Map<String, String> newMeta = Maps.newHashMap();
+    newMeta.putAll(loadNamespaceMetadata(namespace));
+    newMeta.putAll(meta);
+
     try {
       clients.run(client -> {
-        client.alterDatabase(namespace.toString(), currentDb);
+        client.alterDatabase(namespace.toString(), convertToDatabase(namespace, newMeta));
         return null;
       });
+
       return true;
+
     } catch (NoSuchObjectException | UnknownDBException e) {
-      throw new NoSuchNamespaceException("Namespace %s does not exist: %s", namespace.toString(), e);
+      throw new NoSuchNamespaceException(e, "Namespace does not exist: %s", namespace);
 
     } catch (TException e) {
       throw new RuntimeException(
-          "Failed to list namespace under namespace: " + namespace.toString() + " in Hive MataStore", e);
+          "Failed to list namespace under namespace: " + namespace + " in Hive MataStore", e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new RuntimeException(
-          "Interrupted in call to getDatabase(name)" + namespace.toString() + " in Hive MataStore", e);
+      throw new RuntimeException("Interrupted in call to getDatabase(name)" + namespace + " in Hive MataStore", e);
     }
-
   }
 
   @Override
@@ -292,16 +301,15 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
       return convertToMetadata(database);
 
     } catch (NoSuchObjectException | UnknownDBException e) {
-      throw new NoSuchNamespaceException("Namespace %s does not exist: %s", namespace, e);
+      throw new NoSuchNamespaceException(e, "Namespace does not exist: %s", namespace);
 
     } catch (TException e) {
-      throw new RuntimeException(
-          "Failed to list namespace under namespace: " + namespace.toString() + " in Hive MataStore", e);
+      throw new RuntimeException("Failed to list namespace under namespace: " + namespace + " in Hive MataStore", e);
 
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new RuntimeException(
-          "Interrupted in call to getDatabase(name)" + namespace.toString() + " in Hive MataStore", e);
+          "Interrupted in call to getDatabase(name)" + namespace + " in Hive MataStore", e);
     }
   }
 
@@ -331,14 +339,11 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
   }
 
   public  Map<String, String> convertToMetadata(Database database) {
-    Map<String, String> nameMap = Maps.newHashMap();
-
-    nameMap.put("name", database.getName());
-    nameMap.put("location", database.getLocationUri());
-    nameMap.put("comment", database.getDescription());
-    database.getParameters().forEach(nameMap::put);
-
-    return nameMap;
+    return ImmutableMap.<String, String>builder()
+        .put("location", database.getLocationUri())
+        .put("comment", database.getDescription())
+        .putAll(database.getParameters())
+        .build();
   }
 
   public  Database convertToDatabase(Namespace namespace, Map<String, String> meta) {
@@ -347,16 +352,12 @@ public class HiveCatalog extends BaseMetastoreCatalog implements Closeable, Supp
     if (namespace.levels().length != 1) {
       throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
     }
-    if (!meta.containsKey("location")) {
-      Preconditions.checkNotNull(warehouseLocation,
-          "Warehouse location is not set: hive.metastore.warehouse.dir=null");
-    }
 
     Database database  = new Database();
     Map<String, String> parameter = Maps.newHashMap();
 
     database.setName(namespace.toString());
-    database.setLocationUri(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())) + ".db");
+    database.setLocationUri(SLASH.join(warehouseLocation, namespace.level(0)) + ".db");
 
     meta.forEach((key, value) -> {
       if (key.equals("comment")) {

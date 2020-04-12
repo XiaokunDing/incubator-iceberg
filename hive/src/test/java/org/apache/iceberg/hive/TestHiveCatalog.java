@@ -19,7 +19,7 @@
 
 package org.apache.iceberg.hive;
 
-import java.util.HashMap;
+import com.google.common.collect.ImmutableMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -31,16 +31,12 @@ import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
 
-
 public class TestHiveCatalog extends HiveMetastoreTest {
   private static final String hiveLocalDir = "file:/tmp/hive/" + UUID.randomUUID().toString();
-  private static Map meta = new HashMap<String, String>() {
-    {
-      put("owner", "apache");
-      put("group", "iceberg");
-      put("comment", "iceberg  hiveCatalog test");
-    }
-  };
+  private static ImmutableMap meta = ImmutableMap.of(
+      "owner", "apache",
+      "group", "iceberg",
+      "comment", "iceberg  hiveCatalog test");
 
   @Test
   public void testCreateNamespace() throws TException {
@@ -54,15 +50,18 @@ public class TestHiveCatalog extends HiveMetastoreTest {
     Assert.assertEquals("There no same location for db and namespace",
         database1.getLocationUri(), defaultUri(namespace1));
 
-    AssertHelpers.assertThrows("Should fail to create when namespace already exist" + namespace1.toString(),
+    AssertHelpers.assertThrows("Should fail to create when namespace already exist" + namespace1,
         org.apache.iceberg.exceptions.AlreadyExistsException.class,
-        "Namespace '" + namespace1.toString() + "' already exists!", () -> {
+        "Namespace '" + namespace1 + "' already exists!", () -> {
           catalog.createNamespace(namespace1);
         });
-
-    meta.put("location", hiveLocalDir);
+    ImmutableMap newMeta = ImmutableMap.<String, String>builder()
+        .putAll(meta)
+        .put("location", hiveLocalDir)
+        .build();
     Namespace namespace2 = Namespace.of("haveLocation");
-    catalog.createNamespace(namespace2, meta);
+
+    catalog.createNamespace(namespace2, newMeta);
     Database database2 = metastoreClient.getDatabase(namespace2.toString());
     Assert.assertEquals("There no same location for db and namespace",
         database2.getLocationUri(), hiveLocalDir);
@@ -98,27 +97,24 @@ public class TestHiveCatalog extends HiveMetastoreTest {
   @Test
   public void testAlterNamespaceMeta() throws TException {
     Namespace namespace = Namespace.of("dbname_alter");
-    catalog.createNamespace(namespace, meta);
-    meta.put("owner", "alter_apache");
-    meta.put("group", "alter_iceberg");
-    meta.remove("location");
-    catalog.setNamespaceMetadata(namespace, meta);
-    Database database = metastoreClient.getDatabase(namespace.toString());
-    Assert.assertTrue(database.getParameters().get("owner").equals("alter_apache"));
-    Assert.assertTrue(database.getParameters().get("group").equals("alter_iceberg"));
 
-    meta.put("location", hiveLocalDir);
-    AssertHelpers.assertThrows("Should fail to change namespace location" + namespace.toString(),
+    catalog.createNamespace(namespace, meta);
+    catalog.alterNamespace(namespace, ImmutableMap.of("owner", "alter_apache"));
+    Database database = metastoreClient.getDatabase(namespace.toString());
+
+    Assert.assertTrue(database.getParameters().get("owner").equals("alter_apache"));
+    Assert.assertTrue(database.getParameters().get("group").equals("iceberg"));
+
+    AssertHelpers.assertThrows("Should fail to change namespace location" + namespace,
         UnsupportedOperationException.class,
-        "Does not support change 'location' in HiveCatalog: " + namespace.toString(), () -> {
-          catalog.setNamespaceMetadata(namespace, meta);
+        "Does not support change 'location' in HiveCatalog: " + namespace, () -> {
+          catalog.alterNamespace(namespace, ImmutableMap.of("location", hiveLocalDir));
         });
-    meta.remove("location");
-    meta.put("name", "test_new");
-    AssertHelpers.assertThrows("Should fail to change namespace location" + namespace.toString(),
+
+    AssertHelpers.assertThrows("Should fail to change namespace location" + namespace,
         UnsupportedOperationException.class,
-        "Does not support change 'name' in HiveCatalog: " + namespace.toString(), () -> {
-          catalog.setNamespaceMetadata(namespace, meta);
+        "Does not support change 'name' in HiveCatalog: " + namespace, () -> {
+          catalog.alterNamespace(namespace, ImmutableMap.of("name", "test_new"));
         });
   }
 
@@ -131,14 +127,14 @@ public class TestHiveCatalog extends HiveMetastoreTest {
     Assert.assertTrue(nameMata.get("owner").equals("apache"));
     Assert.assertTrue(nameMata.get("group").equals("iceberg"));
 
-    Assert.assertTrue("Drop namespace " + namespace.toString() + " error ", catalog.dropNamespace(namespace));
+    Assert.assertTrue("Drop namespace " + namespace + " error ", catalog.dropNamespace(namespace));
     AssertHelpers.assertThrows("Should fail to drop when namespace doesn't exist", NoSuchNamespaceException.class,
-        "Namespace db.ns1 does not exist: ", () -> {
+        "Namespace 'db.ns1' does not exist!", () -> {
           catalog.dropNamespace(Namespace.of("db.ns1"));
         });
-    AssertHelpers.assertThrows("Should fail to drop namespace exist" + namespace.toString(),
+    AssertHelpers.assertThrows("Should fail to drop namespace exist" + namespace,
         org.apache.iceberg.exceptions.NoSuchNamespaceException.class,
-        "Namespace " + namespace.toString() + " does not exist: ", () -> {
+        "Namespace does not exist: ", () -> {
           catalog.loadNamespaceMetadata(namespace);
         });
   }
