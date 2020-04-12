@@ -33,6 +33,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.NamespaceChange;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.junit.Assert;
@@ -214,7 +215,7 @@ public class TestHadoopCatalog extends HadoopTableTestBase {
     Assert.assertTrue(tblSet2.contains("db"));
     Assert.assertTrue(tblSet2.contains("db2"));
 
-    List<Namespace> nsp4 = catalog.listNamespaces(Namespace.empty());
+    List<Namespace> nsp4 = catalog.listNamespaces();
     Set<String> tblSet3 = Sets.newHashSet(nsp4.stream().map(t -> t.toString()).iterator());
     Assert.assertEquals(tblSet3.size(), 2);
     Assert.assertTrue(tblSet3.contains("db"));

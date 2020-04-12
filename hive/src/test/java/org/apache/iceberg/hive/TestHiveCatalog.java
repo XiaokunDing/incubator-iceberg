@@ -26,6 +26,7 @@ import java.util.UUID;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.iceberg.AssertHelpers;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.NamespaceChange;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.thrift.TException;
 import org.junit.Assert;
@@ -50,7 +51,7 @@ public class TestHiveCatalog extends HiveMetastoreTest {
     Assert.assertEquals("There no same location for db and namespace",
         database1.getLocationUri(), defaultUri(namespace1));
 
-    AssertHelpers.assertThrows("Should fail to create when namespace already exist" + namespace1,
+    AssertHelpers.assertThrows("Should fail to create when namespace already exist " + namespace1,
         org.apache.iceberg.exceptions.AlreadyExistsException.class,
         "Namespace '" + namespace1 + "' already exists!", () -> {
           catalog.createNamespace(namespace1);
@@ -73,7 +74,7 @@ public class TestHiveCatalog extends HiveMetastoreTest {
     Namespace namespace1 = Namespace.of("dbname1");
     catalog.createNamespace(namespace1, meta);
     namespaces = catalog.listNamespaces(namespace1);
-    Assert.assertTrue("Hive db not hive the namespace 'dbname1'", namespaces.get(0).isEmpty());
+    Assert.assertTrue("Hive db not hive the namespace 'dbname1'", namespaces.isEmpty());
 
     Namespace namespace2 = Namespace.of("dbname2");
     catalog.createNamespace(namespace2, meta);
@@ -99,23 +100,20 @@ public class TestHiveCatalog extends HiveMetastoreTest {
     Namespace namespace = Namespace.of("dbname_alter");
 
     catalog.createNamespace(namespace, meta);
-    catalog.alterNamespace(namespace, ImmutableMap.of("owner", "alter_apache"));
-    Database database = metastoreClient.getDatabase(namespace.toString());
+    catalog.alterNamespace(namespace,
+        NamespaceChange.setProperty("owner", "alter_apache"),
+        NamespaceChange.setProperty("test", "test"),
+        NamespaceChange.setProperty("location", "file:/data/tmp"),
+        NamespaceChange.removeProperty("test3"),
+        NamespaceChange.removeProperty("group")
+    );
+
+    Database database = metastoreClient.getDatabase(namespace.level(0));
 
     Assert.assertTrue(database.getParameters().get("owner").equals("alter_apache"));
-    Assert.assertTrue(database.getParameters().get("group").equals("iceberg"));
-
-    AssertHelpers.assertThrows("Should fail to change namespace location" + namespace,
-        UnsupportedOperationException.class,
-        "Does not support change 'location' in HiveCatalog: " + namespace, () -> {
-          catalog.alterNamespace(namespace, ImmutableMap.of("location", hiveLocalDir));
-        });
-
-    AssertHelpers.assertThrows("Should fail to change namespace location" + namespace,
-        UnsupportedOperationException.class,
-        "Does not support change 'name' in HiveCatalog: " + namespace, () -> {
-          catalog.alterNamespace(namespace, ImmutableMap.of("name", "test_new"));
-        });
+    Assert.assertTrue(database.getParameters().get("test").equals("test"));
+    Assert.assertEquals(database.getParameters().get("group"), null);
+    Assert.assertEquals(database.getParameters().get("test3"), null);
   }
 
   @Test
@@ -129,7 +127,7 @@ public class TestHiveCatalog extends HiveMetastoreTest {
 
     Assert.assertTrue("Drop namespace " + namespace + " error ", catalog.dropNamespace(namespace));
     AssertHelpers.assertThrows("Should fail to drop when namespace doesn't exist", NoSuchNamespaceException.class,
-        "Namespace 'db.ns1' does not exist!", () -> {
+        "Namespace does not exist: ", () -> {
           catalog.dropNamespace(Namespace.of("db.ns1"));
         });
     AssertHelpers.assertThrows("Should fail to drop namespace exist" + namespace,
@@ -141,7 +139,7 @@ public class TestHiveCatalog extends HiveMetastoreTest {
 
   private String defaultUri(Namespace namespace) throws TException {
     return metastoreClient.getConfigValue(
-        "hive.metastore.warehouse.dir", "") +  "/" + namespace.toString() + ".db";
+        "hive.metastore.warehouse.dir", "") +  "/" + namespace.level(0) + ".db";
   }
 
 }

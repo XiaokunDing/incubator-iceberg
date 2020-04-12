@@ -103,11 +103,12 @@ public interface SupportsNamespaces {
   boolean dropNamespace(Namespace namespace) throws NoSuchNamespaceException;
 
   /**
-   * Create a namespace in the catalog.
+   * Apply a set of metadata changes to a namespace in the catalog.
    *
-   * @param namespace a multi-part namespace
-   * @param metadata a string ImmutableMap of properties for the given namespace
-   * @throws UnsupportedOperationException If create is not a supported operation
+   * @param namespace a Namespace.of(name) {@link Namespace}
+   * @param changes a collection of changes to apply to the namespace
+   * @throws NoSuchNamespaceException If the namespace does not exist (optional)
+   * @throws UnsupportedOperationException If namespace properties are not supported
    */
-  boolean alterNamespace(Namespace namespace, ImmutableMap<String, String> metadata);
+  boolean alterNamespace(Namespace namespace, NamespaceChange... changes) throws NoSuchNamespaceException;
 }

@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import java.io.Closeable;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -43,14 +44,13 @@ import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.NamespaceChange;
 import org.apache.iceberg.catalog.SupportsNamespaces;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.AlreadyExistsException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.exceptions.RuntimeIOException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * HadoopCatalog provides a way to use table names like db.table to work with path-based tables under a common
@@ -67,7 +67,6 @@ import org.slf4j.LoggerFactory;
  */
 
 public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, SupportsNamespaces {
-  private static final Logger LOG = LoggerFactory.getLogger(HadoopCatalog.class);
 
   private static final String ICEBERG_HADOOP_WAREHOUSE_BASE = "iceberg/warehouse";
   private static final String TABLE_METADATA_FILE_EXTENSION = ".metadata.json";
@@ -76,7 +75,6 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
 
   private final Configuration conf;
   private String warehouseLocation;
-  private HadoopFileIO defaultFileIo = null;
 
   /**
    * The constructor of the HadoopCatalog. It uses the passed location as its warehouse directory.
@@ -114,14 +112,13 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
     Preconditions.checkArgument(namespace.levels().length >= 1,
         "Missing database in table identifier: %s", namespace);
 
-    Joiner slash = Joiner.on("/");
-    Path nsPath = new Path(slash.join(warehouseLocation, slash.join(namespace.levels())));
+    Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
     Set<TableIdentifier> tblIdents = Sets.newHashSet();
 
     try {
       if (!fs.exists(nsPath) || !fs.isDirectory(nsPath)) {
-        throw new NoSuchNamespaceException("Namespace does not exist: " + namespace);
+        throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
       }
 
       for (FileStatus s : fs.listStatus(nsPath)) {
@@ -217,11 +214,11 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
     Preconditions.checkArgument(
         !namespace.isEmpty(),
         "Cannot create namespace with invalid name: %s", namespace);
-    Preconditions.checkArgument(
-        meta.isEmpty(),
-        "Hadoop Catalog not support metadata %s on namespace: %s", meta, namespace);
+    if (!meta.isEmpty()) {
+      throw new UnsupportedOperationException("Cannot create namespace " + namespace + " : metadata is not supported");
+    }
 
-    Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
+    Path nsPath = new Path(warehouseLocation, SLASH.join(namespace.levels()));
     FileSystem fs = Util.getFs(nsPath, conf);
 
     try {
@@ -246,20 +243,11 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
     }
 
     try {
-      if (!namespace.isEmpty()) {
-        return Stream.of(fs.listStatus(nsPath))
-            .map(FileStatus::getPath)
-            .filter(path -> isNamespace(fs, path))
-            .map(path -> Namespace.of(namespace.toString() + "." + path.getName()))
-            .collect(Collectors.toList());
-      } else {
-        return Stream.of(fs.listStatus(nsPath))
-            .map(FileStatus::getPath)
-            .filter(path -> isNamespace(fs, path))
-            .map(path -> Namespace.of(path.getName()))
-            .collect(Collectors.toList());
-      }
-
+      return Stream.of(fs.listStatus(nsPath))
+        .map(FileStatus::getPath)
+        .filter(path -> isNamespace(fs, path))
+        .map(path -> append(namespace, path.getName()))
+        .collect(Collectors.toList());
     } catch (IOException ioe) {
       throw new RuntimeIOException(ioe, "Failed to list namespace under: %s", namespace);
     }
@@ -271,7 +259,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
     FileSystem fs = Util.getFs(nsPath, conf);
 
     try {
-      if (!isNamespace(fs, nsPath)) {
+      if (!isNamespace(fs, nsPath) || namespace.isEmpty()) {
         throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
       }
 
@@ -283,20 +271,17 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
   }
 
   @Override
-  public boolean alterNamespace(Namespace namespace, ImmutableMap<String, String> meta) {
-    throw new UnsupportedOperationException("Unsupported setNamespaceMetadata() in the HadoopCatalog: " + namespace);
+  public boolean alterNamespace(Namespace namespace, NamespaceChange... changes) {
+    throw new UnsupportedOperationException(
+        "Cannot alter namespace " + namespace + " : alterNamespace is not supported");
   }
 
   @Override
   public Map<String, String> loadNamespaceMetadata(Namespace namespace) {
-    if (namespace.isEmpty()) {
-      throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
-    }
-
     Path nsPath = new Path(SLASH.join(warehouseLocation, SLASH.join(namespace.levels())));
     FileSystem fs = Util.getFs(nsPath, conf);
 
-    if (!isNamespace(fs, nsPath)) {
+    if (!isNamespace(fs, nsPath) || namespace.isEmpty()) {
       throw new NoSuchNamespaceException("Namespace does not exist: %s", namespace);
     }
 
@@ -312,6 +297,11 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
     } catch (IOException ioe) {
       throw new RuntimeIOException(ioe, "Failed to list namespace info: %s ", path);
     }
+  }
+  static Namespace append(Namespace ns, String name) {
+    String[] levels = Arrays.copyOfRange(ns.levels(), 0, ns.levels().length + 1);
+    levels[ns.levels().length] = name;
+    return Namespace.of(levels);
   }
 
   @Override
