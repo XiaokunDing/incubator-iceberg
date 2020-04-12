@@ -137,7 +137,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
         }
       }
     } catch (IOException ioe) {
-      throw new RuntimeException("Failed to list tables under " + namespace, ioe);
+      throw new RuntimeIOException("Failed to list tables under " + namespace, ioe);
     }
 
     return Lists.newArrayList(tblIdents);
@@ -251,7 +251,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
         namespaceList.add(Namespace.of(namespaces));
       }
     } catch (IOException ioe) {
-      throw new RuntimeException("Failed to list namespace under: " + namespace.toString(), ioe);
+      throw new RuntimeIOException("Failed to list namespace under: " + namespace.toString(), ioe);
     }
 
     return namespaceList;
@@ -296,7 +296,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
       meta.put("name", namespace.toString());
       meta.put("location", info.getPath().toString());
     } catch (IOException ioe) {
-      throw new RuntimeException("Failed to list namespace info " + namespace, ioe);
+      throw new RuntimeIOException("Failed to list namespace info " + namespace, ioe);
     }
     return meta;
   }
@@ -309,7 +309,7 @@ public class HadoopCatalog extends BaseMetastoreCatalog implements Closeable, Su
         return true;
       }
     } catch (IOException ioe) {
-      throw new RuntimeException("Failed to list namespace info " + path, ioe);
+      throw new RuntimeIOException("Failed to list namespace info " + path, ioe);
     }
     return false;
   }
